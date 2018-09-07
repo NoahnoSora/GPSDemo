@@ -282,8 +282,7 @@ public class MainActivity extends AppCompatActivity {
             needwrite = true;
             //定位启动
         }else if(event == GpsStatus.GPS_EVENT_STOPPED) {
-            stringBuilder.append("\n").append("定位结束!=====================================================================");
-            needwrite = true;
+            Log.i(TAG,"定位结束!=====================================================================");
             //定位结束
         }
         stutext.setText(stringBuilder.toString());
