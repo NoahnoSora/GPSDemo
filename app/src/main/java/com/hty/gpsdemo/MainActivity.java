@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -31,14 +33,18 @@ public class MainActivity extends AppCompatActivity {
     private final String TAG = "MainActivity";
     private int ttff;
     private int lastreal;
-    private int count = 30;
+    private int count = 100;
     private long starttime;
     private String towrite;
     private boolean doonetime = true;
+    private boolean ready1 = false;
+    private boolean ready2 = false;
+    private List<GpsSatellite> numSatelliteList = new ArrayList<>();
     @SuppressLint("SdCardPath")
     String filePath = "/sdcard/";
     String fileName = "data.txt";
     FileOp fo = new FileOp();
+    Timer timer = new Timer();
     private LocationManager locationManager;
     private LocationListener locationListener;
     @SuppressLint("HandlerLeak")
@@ -47,16 +53,34 @@ public class MainActivity extends AppCompatActivity {
             super.handleMessage(msg);
             switch (msg.what) {
                 case 0:
-                    fo.writeTxtToFile(towrite,filePath,fileName);
                     endLocation();
+                    fo.writeTxtToFile(towrite,filePath,fileName);
                     count--;
+                    /*try {
+                        Thread.sleep(120000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                     if(count>0){
                         startLocation();
+                    }*/
+                    if(count>0){
+                        timer.schedule(new TimerTask() {
+                            @Override
+                            public void run() {
+                                Log.i(TAG,"剩余次数:count");
+                                Message msg = new Message();
+                                msg.what = 2;
+                                mhandler.sendMessage(msg);
+                            }
+                        },10000);
                     }
                     break;
                 case 1://将信息打印到文本文件中
                     fo.writeTxtToFile(towrite,filePath,fileName);
                     break;
+                case 2:
+                    startLocation();
                 default:
                     break;
             }
@@ -79,22 +103,25 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart(){
         super.onStart();
+        Log.i(TAG,"onStart");
         startLocation();
     }
 
     @Override
     protected void onStop(){
         super.onStop();
+        Log.i(TAG,"onStop");
+        timer.cancel();
         endLocation();
     }
 
     private void initLocation(){
-        doonetime = true;
         initView();
         initListener();
     }
 
     private void startLocation(){
+        doonetime = true;
         if(checkPermission()){
             setLocationEnable();
         }
@@ -104,9 +131,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void endLocation(){
-        locationManager.removeUpdates(locationListener);
         locationManager.removeGpsStatusListener(statusListener);
+        locationManager.removeUpdates(locationListener);
     }
+
+    private void firstFix(int type){
+        switch (type){
+            case 0:
+                ready1 = true;
+                break;
+            case 1:
+                ready2 = true;
+                break;
+            default:
+                break;
+            }
+        if(ready1 && ready2) {
+            ready1 = false;
+            ready2 = false;
+            Message msg = Message.obtain();
+            msg.what = 0;
+            mhandler.sendMessage(msg);
+        }
+}
 
     private void initView(){
         loctext = findViewById(R.id.loctext);
@@ -124,10 +171,10 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onLocationChanged(Location location) {
                 updateShow(location);
-                Log.i(TAG, "时间："+location.getTime());
+                /*Log.i(TAG, "时间："+location.getTime());
                 Log.i(TAG, "经度："+location.getLongitude());
                 Log.i(TAG, "纬度："+location.getLatitude());
-                Log.i(TAG, "海拔："+location.getAltitude());
+                Log.i(TAG, "海拔："+location.getAltitude());*/
             }
             @Override
             public void onStatusChanged(String s, int i, Bundle bundle) {
@@ -149,12 +196,12 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onProviderEnabled(String s) {
-                Log.i(TAG, "可以使用");
+                Log.i(TAG, "GPS使能");
             }
 
             @Override
             public void onProviderDisabled(String s) {
-
+                Log.i(TAG,"GPS失能");
             }
         };
     }
@@ -194,9 +241,6 @@ public class MainActivity extends AppCompatActivity {
                     location.getAccuracy();
             loctext.setText(sb);
             if(doonetime){
-                Message msg = Message.obtain();
-                msg.what = 1;
-                mhandler.sendMessage(msg);
                 towrite = "\n经度：" +
                         location.getLongitude() +
                         "\n纬度：" +
@@ -207,7 +251,11 @@ public class MainActivity extends AppCompatActivity {
                         location.getSpeed() +
                         "\n定位精度：" +
                         location.getAccuracy();
+                Message msg = Message.obtain();
+                msg.what = 1;
+                mhandler.sendMessage(msg);
                 doonetime = false;
+                firstFix(0);
             }
         }
         /*else{
@@ -228,7 +276,6 @@ public class MainActivity extends AppCompatActivity {
         }*/
     }
 
-    private List<GpsSatellite> numSatelliteList = new ArrayList<>();
 
     private void updateGpsStatus(int event,GpsStatus status){
         boolean needwrite = false;
@@ -237,13 +284,10 @@ public class MainActivity extends AppCompatActivity {
             stringBuilder.append("没有捕捉到卫星!");
         }else if(event == GpsStatus.GPS_EVENT_FIRST_FIX){
             ttff = status.getTimeToFirstFix();
-            stringBuilder.append("\n").append("定位用时:").append(ttff).append("ms");
-            stringBuilder.append("\n").append("定位结束=====================================================================");
+            stringBuilder.append("\r\n").append("定位用时:").append(ttff).append("ms");
+            stringBuilder.append("\r\n").append("定位成功!=====================================================================");
             towrite = stringBuilder.toString();
-            Message msg = Message.obtain();
-            msg.what = 0;
-            mhandler.sendMessage(msg);
-
+            firstFix(1);
         }else if(event == GpsStatus.GPS_EVENT_SATELLITE_STATUS){
             long nowtime = new Date().getTime();
             Log.i(TAG, "Time stamp[GPS_EVENT_SATELLITE_STATUS]->" + nowtime);
@@ -258,28 +302,32 @@ public class MainActivity extends AppCompatActivity {
                 count++;
                 if(Float.compare(s.getSnr(),0.0f) > 0) {
                     real++;
-                    stringBuilder.append("\n").append("卫星").append(count).append(":").append(s.getSnr()).append("db");
+                    stringBuilder.append("\r\n").append("卫星").append(count).append(":").append(s.getSnr()).append("db");
                 }
             }
-            stringBuilder.append("\n").append("时间:").append(nowtime - starttime).append("ms");
-            stringBuilder.append("\n").append("卫星总数:").append(numSatelliteList.size());
-            stringBuilder.append("\n").append("有信号卫星:").append(real);
+            stringBuilder.append("\r\n").append("时间:").append(nowtime - starttime).append("ms");
+            stringBuilder.append("\r\n").append("卫星总数:").append(numSatelliteList.size());
+            stringBuilder.append("\r\n").append("有信号卫星:").append(real);
             if(real!=lastreal) {
                 needwrite = true;
+                lastreal = real;
             }
-            lastreal = real;
+            else{
+                needwrite = false;
+            }
             if((nowtime - starttime)>30000){
                 towrite = "超过30s，定位失败" +
-                        "\n定位结束！=====================================================================";
-                stutext.setText(towrite);
+                        "\r\n定位结束!=====================================================================\r\n";
+                stringBuilder.append("\r\n超过30s，定位结束\r\n剩余次数:").append(this.count);
                 Message msg = Message.obtain();
                 msg.what = 0;
                 mhandler.sendMessage(msg);
             }
         }else if(event == GpsStatus.GPS_EVENT_STARTED){
             starttime = new Date().getTime();
-            stringBuilder.append("定位启动!=====================================================================").append("\n第").append(count).append("次");
+            stringBuilder.append("定位启动!=====================================================================").append("\r\n第").append(count).append("次");
             needwrite = true;
+            lastreal = 0;
             //定位启动
         }else if(event == GpsStatus.GPS_EVENT_STOPPED) {
             Log.i(TAG,"定位结束!=====================================================================");
