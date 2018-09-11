@@ -55,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
                 case 0:
                     endLocation();
                     fo.writeTxtToFile(towrite,filePath,fileName);
+                    towrite = null;
                     count--;
                     /*try {
                         Thread.sleep(120000);
@@ -68,7 +69,7 @@ public class MainActivity extends AppCompatActivity {
                         timer.schedule(new TimerTask() {
                             @Override
                             public void run() {
-                                Log.i(TAG,"剩余次数:count");
+                                Log.i(TAG,"剩余次数:"+count);
                                 Message msg = new Message();
                                 msg.what = 2;
                                 mhandler.sendMessage(msg);
@@ -78,6 +79,7 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 case 1://将信息打印到文本文件中
                     fo.writeTxtToFile(towrite,filePath,fileName);
+                    towrite = null;//每次写完清空字符
                     break;
                 case 2:
                     startLocation();
@@ -241,19 +243,29 @@ public class MainActivity extends AppCompatActivity {
                     location.getAccuracy();
             loctext.setText(sb);
             if(doonetime){
-                towrite = "\n经度：" +
-                        location.getLongitude() +
-                        "\n纬度：" +
-                        location.getLatitude() +
-                        "\n高度：" +
-                        location.getAltitude() +
-                        "\n速度：" +
-                        location.getSpeed() +
-                        "\n定位精度：" +
-                        location.getAccuracy();
-                Message msg = Message.obtain();
-                msg.what = 1;
-                mhandler.sendMessage(msg);
+                if(towrite!=null){
+                    towrite = "\n经度：" +
+                            location.getLongitude() +
+                            "\n纬度：" +
+                            location.getLatitude() +
+                            "\n高度：" +
+                            location.getAltitude() +
+                            "\n速度：" +
+                            location.getSpeed() +
+                            "\n定位精度：" +
+                            location.getAccuracy() + towrite;
+                }else {
+                    towrite = "\n经度：" +
+                            location.getLongitude() +
+                            "\n纬度：" +
+                            location.getLatitude() +
+                            "\n高度：" +
+                            location.getAltitude() +
+                            "\n速度：" +
+                            location.getSpeed() +
+                            "\n定位精度：" +
+                            location.getAccuracy();
+                }
                 doonetime = false;
                 firstFix(0);
             }
@@ -286,7 +298,12 @@ public class MainActivity extends AppCompatActivity {
             ttff = status.getTimeToFirstFix();
             stringBuilder.append("\r\n").append("定位用时:").append(ttff).append("ms");
             stringBuilder.append("\r\n").append("定位成功!=====================================================================");
-            towrite = stringBuilder.toString();
+            if(towrite!=null){
+                towrite = towrite + stringBuilder.toString();
+            }
+            else{
+                towrite = stringBuilder.toString();
+            }
             firstFix(1);
         }else if(event == GpsStatus.GPS_EVENT_SATELLITE_STATUS){
             long nowtime = new Date().getTime();
